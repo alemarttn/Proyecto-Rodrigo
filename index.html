@@ -20,31 +20,32 @@
       }
     </script>
     <style>
-      body { background-color: #050507; color: white; margin: 0; font-family: 'Inter', sans-serif; }
+      body { background-color: #050507; color: white; margin: 0; font-family: 'Inter', sans-serif; overflow-x: hidden; }
       .glass {
-        background: rgba(255, 255, 255, 0.03);
-        backdrop-filter: blur(10px);
+        background: rgba(255, 255, 255, 0.02);
+        backdrop-filter: blur(12px);
         border: 1px solid rgba(255, 255, 255, 0.08);
       }
-      .neon-border-green { border-color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.2); }
-      .neon-border-yellow { border-color: #f59e0b; box-shadow: 0 0 15px rgba(245, 158, 11, 0.2); }
-      .neon-border-red { border-color: #ef4444; box-shadow: 0 0 15px rgba(239, 68, 68, 0.2); }
+      .neon-border-green { border-color: #10b981; box-shadow: 0 0 20px rgba(16, 185, 129, 0.15); }
+      .neon-border-yellow { border-color: #f59e0b; box-shadow: 0 0 20px rgba(245, 158, 11, 0.15); }
+      .neon-border-red { border-color: #ef4444; box-shadow: 0 0 20px rgba(239, 68, 68, 0.15); }
       
       input[type="range"] {
         -webkit-appearance: none;
-        height: 6px;
+        height: 4px;
         background: rgba(255, 255, 255, 0.1);
-        border-radius: 5px;
+        border-radius: 10px;
         outline: none;
       }
       input[type="range"]::-webkit-slider-thumb {
         -webkit-appearance: none;
-        width: 18px;
-        height: 18px;
+        width: 20px;
+        height: 20px;
         background: #6366f1;
         border-radius: 50%;
         cursor: pointer;
-        border: 2px solid white;
+        border: 3px solid #050507;
+        box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
       }
     </style>
     <script type="importmap">
