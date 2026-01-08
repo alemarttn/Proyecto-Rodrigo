@@ -8,6 +8,12 @@ const supabaseUrl = 'https://mzocyzpgrynftmjstukq.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16b2N5enBncnluZnRtanN0dWtxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwOTY4NDUsImV4cCI6MjA4MjY3Mjg0NX0.nuR3x-8Yf7zqBbx8IuNcdKT9NQ9YH4-BcCX4LSGXu_I';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+const SYSTEM_PROMPT = `Eres el "Coach Engine" de alto rendimiento. Analiza datos biométricos y psicológicos.
+Reglas críticas:
+- Genera JSON SIEMPRE válido.
+- Sé extremadamente conciso (máximo 200 caracteres por texto).
+- Clasifica: VERDE (Score > 0.7), AMARILLO (0.5-0.7), ROJO (< 0.5).`;
+
 // --- 2. INTERFACES ---
 interface AthleteProfile {
   athlete_id: string;
@@ -46,12 +52,6 @@ interface CoachEngineResponse {
   motivational_message: string;
 }
 
-const SYSTEM_PROMPT = `Eres el "Coach Engine" de alto rendimiento. Analiza datos biométricos y psicológicos.
-Reglas críticas:
-- Genera JSON SIEMPRE válido.
-- Sé extremadamente conciso (máximo 200 caracteres por texto).
-- Clasifica: VERDE (Score > 0.7), AMARILLO (0.5-0.7), ROJO (< 0.5).`;
-
 // --- 3. SERVICIOS ---
 async function generateProfileAnalysis(data: any): Promise<AthleteProfile> {
   const apiKey = process.env.API_KEY;
@@ -62,7 +62,7 @@ async function generateProfileAnalysis(data: any): Promise<AthleteProfile> {
   const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: [{ parts: [{ text: `Analiza y estructura este perfil de atleta: ${JSON.stringify(data)}` }] }],
+    contents: { parts: [{ text: `Analiza y estructura este perfil de atleta: ${JSON.stringify(data)}` }] },
     config: {
       systemInstruction: SYSTEM_PROMPT,
       responseMimeType: 'application/json',
@@ -95,7 +95,7 @@ async function getCoachEngineAnalysis(profile: AthleteProfile, scores: DailyScor
   const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: [{ parts: [{ text: `Estado actual: Perfil ${JSON.stringify(profile)}, Scores ${JSON.stringify(scores)}` }] }],
+    contents: { parts: [{ text: `Estado actual: Perfil ${JSON.stringify(profile)}, Scores ${JSON.stringify(scores)}` }] },
     config: {
       systemInstruction: SYSTEM_PROMPT,
       responseMimeType: 'application/json',
@@ -181,9 +181,9 @@ const App: React.FC = () => {
     } catch (err: any) {
       console.error("DEBUG ERROR IA:", err);
       if (err.message === "API_KEY_MISSING") {
-        alert("Falta la API_KEY en Netlify. Revisa la configuración de variables de entorno.");
+        alert("¡Error Crítico! process.env.API_KEY no detectado. Si estás en Netlify, asegúrate de que la variable esté guardada y hayas hecho un 'New Deploy'.");
       } else {
-        alert("Error de conexión con la IA. Verifica que tu API Key de Google AI Studio sea válida y tengas saldo/cuota.");
+        alert("Error al conectar con la IA. Revisa la consola (F12) para detalles.");
       }
     } finally { setLoading(false); }
   };
@@ -203,13 +203,13 @@ const App: React.FC = () => {
       setView('results');
     } catch (err) {
       console.error(err);
-      alert("Error al analizar el estado. Revisa la consola (F12).");
+      alert("Error en el análisis diario.");
     } finally { setLoading(false); }
   };
 
   if (loading) return (
-    <div className="min-h-screen bg-[#050507] flex flex-col items-center justify-center text-indigo-500 font-black">
-      <Spinner /><p className="mt-4 uppercase tracking-widest animate-pulse">Analizando con Coach Engine...</p>
+    <div className="min-h-screen bg-[#050507] flex flex-col items-center justify-center text-indigo-500">
+      <Spinner /><p className="mt-4 font-black uppercase tracking-widest animate-pulse">Procesando con Coach Engine...</p>
     </div>
   );
 
@@ -218,9 +218,9 @@ const App: React.FC = () => {
       <div className="max-w-md w-full bg-[#111115] border border-white/5 p-10 rounded-[2.5rem] shadow-2xl">
         <h1 className="text-3xl font-black italic uppercase tracking-tighter text-indigo-500 mb-8 text-center">Athlete Profile</h1>
         <form onSubmit={handleOnboarding} className="space-y-4">
-          <input name="nombre" placeholder="Nombre" required className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none focus:border-indigo-500 transition-all text-white" />
-          <input name="apellidos" placeholder="Apellidos" required className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none focus:border-indigo-500 transition-all text-white" />
-          <input name="deporte_principal" placeholder="Deporte Principal" required className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none focus:border-indigo-500 transition-all text-white" />
+          <input name="nombre" placeholder="Nombre" required className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none focus:border-indigo-500 transition-all" />
+          <input name="apellidos" placeholder="Apellidos" required className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none focus:border-indigo-500 transition-all" />
+          <input name="deporte_principal" placeholder="Deporte Principal" required className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none focus:border-indigo-500 transition-all" />
           <button className="w-full py-5 bg-white text-black font-black uppercase rounded-2xl hover:bg-indigo-600 hover:text-white transition-all transform active:scale-95">Comenzar</button>
         </form>
       </div>
@@ -260,7 +260,7 @@ const App: React.FC = () => {
         <div className={`p-12 rounded-[3rem] border ${results.computed.classification === 'ROJO' ? 'border-red-500/30 bg-red-500/5' : results.computed.classification === 'AMARILLO' ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-emerald-500/30 bg-emerald-500/5'}`}>
           <div className="flex justify-between items-start mb-6">
             <h2 className="text-7xl font-black italic tracking-tighter">{(results.computed.score_global * 100).toFixed(0)}%</h2>
-            <span className={`px-6 py-2 rounded-full text-[10px] font-black uppercase ${results.computed.classification === 'ROJO' ? 'bg-red-500' : results.computed.classification === 'AMARILLO' ? 'bg-yellow-500 text-black' : 'bg-emerald-500 text-black'}`}>
+            <span className={`px-6 py-2 rounded-full text-[10px] font-black uppercase ${results.computed.classification === 'ROJO' ? 'bg-red-500 text-white' : results.computed.classification === 'AMARILLO' ? 'bg-yellow-500 text-black' : 'bg-emerald-500 text-black'}`}>
               {results.computed.classification}
             </span>
           </div>
