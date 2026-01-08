@@ -3,18 +3,18 @@ import ReactDOM from 'react-dom/client';
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenAI, Type } from "@google/genai";
 
-// --- 1. CONFIGURACIÓN ---
+// --- CONFIGURACIÓN ---
 const supabaseUrl = 'https://mzocyzpgrynftmjstukq.supabase.co'; 
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16b2N5enBncnluZnRtanN0dWtxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwOTY4NDUsImV4cCI6MjA4MjY3Mjg0NX0.nuR3x-8Yf7zqBbx8IuNcdKT9NQ9YH4-BcCX4LSGXu_I';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const SYSTEM_PROMPT = `Eres el "Coach Engine" de alto rendimiento. Analiza datos biométricos y psicológicos.
-Reglas críticas:
-- Genera JSON SIEMPRE válido.
-- Sé extremadamente conciso (máximo 200 caracteres por texto).
-- Clasifica: VERDE (Score > 0.7), AMARILLO (0.5-0.7), ROJO (< 0.5).`;
+const SYSTEM_PROMPT = `Eres "MINDCOACH AI", un motor de análisis para atletas de élite.
+Tu objetivo es analizar biométricos y dar feedback accionable.
+- Genera JSON siempre.
+- Sé brutalmente honesto pero motivador.
+- Clasificación: VERDE (Optimizado), AMARILLO (Precaución), ROJO (Riesgo de Lesión/Burnout).`;
 
-// --- 2. INTERFACES ---
+// --- INTERFACES ---
 interface AthleteProfile {
   athlete_id: string;
   nombre: string;
@@ -34,68 +34,53 @@ interface DailyScores {
   focus: number;
 }
 
-interface CoachEngineResponse {
+interface CoachResponse {
   computed: {
     score_global: number;
     classification: 'VERDE' | 'AMARILLO' | 'ROJO';
-    top_fortalezas: { key: string; value: number }[];
-    top_alertas: { key: string; value: number }[];
+    top_fortalezas: string[];
+    top_alertas: string[];
   };
   tool_psychology: {
-    nombre_herramienta: string;
-    duracion_min: number;
-    pasos: string[];
-    guion: string;
-    variante_30s: string;
-    plan_minimo_rojo: string;
+    nombre: string;
+    duracion: string;
+    instrucciones: string[];
+    mantra: string;
   };
-  motivational_message: string;
+  insight: string;
 }
 
-// --- 3. SERVICIOS ---
-async function generateProfileAnalysis(data: any): Promise<AthleteProfile> {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey === "undefined") {
-    throw new Error("API_KEY_MISSING");
-  }
+// --- SERVICIOS ---
+const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 
-  const ai = new GoogleGenAI({ apiKey });
+async function analyzeProfile(data: any): Promise<AthleteProfile> {
+  const ai = getAI();
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: { parts: [{ text: `Analiza y estructura este perfil de atleta: ${JSON.stringify(data)}` }] },
+    contents: { parts: [{ text: `Estructura el perfil: ${JSON.stringify(data)}` }] },
     config: {
       systemInstruction: SYSTEM_PROMPT,
       responseMimeType: 'application/json',
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          athlete_id: { type: Type.STRING },
           nombre: { type: Type.STRING },
           apellidos: { type: Type.STRING },
           deporte_principal: { type: Type.STRING },
           resumen_perfil: { type: Type.STRING }
-        },
-        required: ["nombre", "apellidos"]
+        }
       }
     }
   });
-  
-  const aiData = JSON.parse(response.text || '{}');
-  return {
-    ...data,
-    ...aiData,
-    athlete_id: aiData.athlete_id || `ath_${Date.now()}`
-  };
+  const res = JSON.parse(response.text || '{}');
+  return { ...res, athlete_id: `ath_${Date.now()}` };
 }
 
-async function getCoachEngineAnalysis(profile: AthleteProfile, scores: DailyScores): Promise<CoachEngineResponse> {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API_KEY_MISSING");
-
-  const ai = new GoogleGenAI({ apiKey });
+async function getDailyAnalysis(profile: AthleteProfile, scores: DailyScores): Promise<CoachResponse> {
+  const ai = getAI();
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: { parts: [{ text: `Estado actual: Perfil ${JSON.stringify(profile)}, Scores ${JSON.stringify(scores)}` }] },
+    contents: { parts: [{ text: `Perfil: ${JSON.stringify(profile)}. Datos hoy: ${JSON.stringify(scores)}` }] },
     config: {
       systemInstruction: SYSTEM_PROMPT,
       responseMimeType: 'application/json',
@@ -107,182 +92,161 @@ async function getCoachEngineAnalysis(profile: AthleteProfile, scores: DailyScor
             properties: {
               score_global: { type: Type.NUMBER },
               classification: { type: Type.STRING },
-              top_fortalezas: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { key: { type: Type.STRING }, value: { type: Type.NUMBER } } } },
-              top_alertas: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { key: { type: Type.STRING }, value: { type: Type.NUMBER } } } }
+              top_fortalezas: { type: Type.ARRAY, items: { type: Type.STRING } },
+              top_alertas: { type: Type.ARRAY, items: { type: Type.STRING } }
             }
           },
           tool_psychology: {
             type: Type.OBJECT,
             properties: {
-              nombre_herramienta: { type: Type.STRING },
-              duracion_min: { type: Type.NUMBER },
-              pasos: { type: Type.ARRAY, items: { type: Type.STRING } },
-              guion: { type: Type.STRING },
-              variante_30s: { type: Type.STRING },
-              plan_minimo_rojo: { type: Type.STRING }
+              nombre: { type: Type.STRING },
+              duracion: { type: Type.STRING },
+              instrucciones: { type: Type.ARRAY, items: { type: Type.STRING } },
+              mantra: { type: Type.STRING }
             }
           },
-          motivational_message: { type: Type.STRING }
-        },
-        required: ["computed", "tool_psychology", "motivational_message"]
+          insight: { type: Type.STRING }
+        }
       }
     }
   });
   return JSON.parse(response.text || '{}');
 }
 
-// --- 4. COMPONENTES ---
-const Spinner = () => (
-  <svg className="animate-spin h-10 w-10 text-indigo-500" viewBox="0 0 24 24">
-    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-  </svg>
-);
-
-const EMOJIS: Record<number, string> = { 1: '😫', 2: '😣', 3: '😕', 4: '😐', 5: '🙂', 6: '😌', 7: '😀', 8: '😄', 9: '🤩', 10: '🔥' };
-const METRICS: Record<keyof DailyScores, { label: string }> = {
-  energy: { label: 'Energía' }, sleep_quality: { label: 'Sueño' },
-  mental_wellbeing: { label: 'Bienestar' }, muscle_soreness: { label: 'Músculos' },
-  stress: { label: 'Estrés' }, motivation: { label: 'Motivación' },
-  fatigue: { label: 'Fatiga' }, focus: { label: 'Enfoque' }
-};
-
-// --- 5. APP PRINCIPAL ---
+// --- APP ---
 const App: React.FC = () => {
   const [profile, setProfile] = useState<AthleteProfile | null>(null);
   const [view, setView] = useState<'onboarding' | 'checkin' | 'results'>('onboarding');
   const [scores, setScores] = useState<DailyScores>({ energy: 5, sleep_quality: 5, mental_wellbeing: 5, muscle_soreness: 5, stress: 5, motivation: 5, fatigue: 5, focus: 5 });
-  const [results, setResults] = useState<CoachEngineResponse | null>(null);
+  const [results, setResults] = useState<CoachResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem('athlete_profile');
+    const saved = localStorage.getItem('mindcoach_p');
     if (saved) {
-      try {
-        setProfile(JSON.parse(saved));
-        setView('checkin');
-      } catch (e) {
-        localStorage.removeItem('athlete_profile');
-      }
+      setProfile(JSON.parse(saved));
+      setView('checkin');
     }
   }, []);
 
-  const handleOnboarding = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleStart = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     const fd = new FormData(e.currentTarget);
-    const data = Object.fromEntries(fd.entries());
     try {
-      const full = await generateProfileAnalysis(data);
-      setProfile(full);
-      localStorage.setItem('athlete_profile', JSON.stringify(full));
-      await supabase.from('perfiles').upsert([full], { onConflict: 'athlete_id' });
+      const p = await analyzeProfile(Object.fromEntries(fd));
+      setProfile(p);
+      localStorage.setItem('mindcoach_p', JSON.stringify(p));
+      await supabase.from('perfiles').upsert(p);
       setView('checkin');
-    } catch (err: any) {
-      console.error("DEBUG ERROR IA:", err);
-      if (err.message === "API_KEY_MISSING") {
-        alert("¡Error Crítico! process.env.API_KEY no detectado. Si estás en Netlify, asegúrate de que la variable esté guardada y hayas hecho un 'New Deploy'.");
-      } else {
-        alert("Error al conectar con la IA. Revisa la consola (F12) para detalles.");
-      }
+    } catch (err) {
+      alert("Error de conexión. Verifica tu API Key en Netlify Deploys.");
     } finally { setLoading(false); }
   };
 
-  const handleCheckIn = async () => {
+  const handleCheck = async () => {
     if (!profile) return;
     setLoading(true);
     try {
-      const analysis = await getCoachEngineAnalysis(profile, scores);
-      setResults(analysis);
-      await supabase.from('reportes_diarios').insert([{
-        athlete_id: profile.athlete_id,
-        scores,
-        classification: analysis.computed.classification,
-        created_at: new Date().toISOString()
-      }]);
+      const res = await getDailyAnalysis(profile, scores);
+      setResults(res);
+      await supabase.from('reportes_diarios').insert({ athlete_id: profile.athlete_id, scores, classification: res.computed.classification });
       setView('results');
     } catch (err) {
-      console.error(err);
-      alert("Error en el análisis diario.");
+      alert("Fallo en el análisis del Coach Engine.");
     } finally { setLoading(false); }
   };
 
   if (loading) return (
-    <div className="min-h-screen bg-[#050507] flex flex-col items-center justify-center text-indigo-500">
-      <Spinner /><p className="mt-4 font-black uppercase tracking-widest animate-pulse">Procesando con Coach Engine...</p>
+    <div className="min-h-screen bg-[#050507] flex flex-col items-center justify-center space-y-4">
+      <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+      <span className="text-white text-[10px] font-black uppercase tracking-[0.3em] animate-pulse">Sincronizando Neuronas AI</span>
     </div>
   );
 
   if (view === 'onboarding') return (
-    <div className="min-h-screen bg-[#050507] flex items-center justify-center p-6 text-white font-sans">
-      <div className="max-w-md w-full bg-[#111115] border border-white/5 p-10 rounded-[2.5rem] shadow-2xl">
-        <h1 className="text-3xl font-black italic uppercase tracking-tighter text-indigo-500 mb-8 text-center">Athlete Profile</h1>
-        <form onSubmit={handleOnboarding} className="space-y-4">
-          <input name="nombre" placeholder="Nombre" required className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none focus:border-indigo-500 transition-all" />
-          <input name="apellidos" placeholder="Apellidos" required className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none focus:border-indigo-500 transition-all" />
-          <input name="deporte_principal" placeholder="Deporte Principal" required className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none focus:border-indigo-500 transition-all" />
-          <button className="w-full py-5 bg-white text-black font-black uppercase rounded-2xl hover:bg-indigo-600 hover:text-white transition-all transform active:scale-95">Comenzar</button>
+    <div className="min-h-screen bg-[#050507] p-6 flex items-center justify-center">
+      <div className="max-w-md w-full glass p-10 rounded-[3rem] border border-white/10">
+        <div className="mb-10 text-center">
+          <div className="w-16 h-1 bg-indigo-500 mx-auto mb-4 rounded-full"></div>
+          <h1 className="text-white text-3xl font-black italic uppercase tracking-tighter">MINDCOACH AI</h1>
+          <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-2">Plataforma de Alto Rendimiento</p>
+        </div>
+        <form onSubmit={handleStart} className="space-y-4">
+          <input name="nombre" placeholder="Nombre" required className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-white outline-none focus:border-indigo-500 transition-all" />
+          <input name="apellidos" placeholder="Apellidos" required className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-white outline-none focus:border-indigo-500 transition-all" />
+          <input name="deporte_principal" placeholder="Deporte" required className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-white outline-none focus:border-indigo-500 transition-all" />
+          <button className="w-full py-5 bg-white text-black font-black uppercase rounded-2xl hover:bg-indigo-500 hover:text-white transition-all transform active:scale-95 shadow-xl shadow-white/5">Crear Perfil Atleta</button>
         </form>
       </div>
     </div>
   );
 
   if (view === 'checkin') return (
-    <div className="min-h-screen bg-[#050507] text-white p-8 font-sans">
+    <div className="min-h-screen bg-[#050507] p-8">
       <div className="max-w-4xl mx-auto space-y-12">
-        <header className="flex justify-between items-end border-b border-white/5 pb-8">
+        <header className="flex justify-between items-center border-b border-white/5 pb-8">
           <div>
-            <span className="text-indigo-500 text-[10px] font-black uppercase tracking-widest">MindCoach AI</span>
-            <h1 className="text-5xl font-black italic uppercase tracking-tighter">Check-in</h1>
+            <h2 className="text-white text-4xl font-black italic uppercase tracking-tighter">Daily Check-in</h2>
+            <p className="text-indigo-400 text-[10px] font-black uppercase tracking-widest">{profile?.nombre} {profile?.apellidos} | {profile?.deporte_principal}</p>
           </div>
-          <button onClick={() => { localStorage.clear(); setView('onboarding'); }} className="text-[10px] text-slate-600 font-bold uppercase hover:text-red-500 transition-colors">Reset</button>
+          <button onClick={() => { localStorage.clear(); setView('onboarding'); }} className="text-[10px] text-slate-600 font-bold uppercase border border-white/10 px-4 py-2 rounded-full hover:text-red-500 transition-all">Reset</button>
         </header>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {(Object.keys(METRICS) as Array<keyof DailyScores>).map(key => (
-            <div key={key} className="bg-white/[0.02] p-6 rounded-2xl border border-white/5 space-y-4 group hover:border-white/10 transition-all">
-              <div className="flex justify-between items-center">
-                <span className="font-bold text-xs uppercase text-slate-400 group-hover:text-indigo-400">{METRICS[key].label}</span>
-                <span className="text-3xl">{EMOJIS[scores[key]] || '😐'}</span>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {(Object.keys(scores) as Array<keyof DailyScores>).map(key => (
+            <div key={key} className="glass p-8 rounded-3xl border border-white/5 hover:border-white/20 transition-all">
+              <div className="flex justify-between items-center mb-6">
+                <span className="text-slate-400 font-black uppercase text-[10px] tracking-widest">{key.replace('_', ' ')}</span>
+                <span className="text-2xl font-black text-indigo-500">{scores[key]}</span>
               </div>
-              <input type="range" min="1" max="10" value={scores[key]} onChange={e => setScores({...scores, [key]: Number(e.target.value)})} className="w-full h-1 bg-white/10 rounded-full appearance-none accent-indigo-500 cursor-pointer" />
-              <div className="flex justify-between text-[10px] font-bold text-slate-600"><span>Nivel {scores[key]}</span></div>
+              <input type="range" min="1" max="10" value={scores[key]} onChange={e => setScores({...scores, [key]: Number(e.target.value)})} className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer" />
             </div>
           ))}
         </div>
-        <button onClick={handleCheckIn} className="w-full py-6 bg-indigo-600 text-white font-black uppercase tracking-[0.2em] rounded-3xl shadow-2xl hover:bg-indigo-500 transition-all transform active:scale-95">Sincronizar Coach Engine</button>
+
+        <button onClick={handleCheck} className="w-full py-8 bg-indigo-600 text-white font-black uppercase tracking-[0.4em] rounded-[2rem] hover:bg-indigo-500 transition-all transform active:scale-95 shadow-2xl shadow-indigo-500/20">Ejecutar Análisis Coach AI</button>
       </div>
     </div>
   );
 
   if (view === 'results' && results) return (
-    <div className="min-h-screen bg-[#050507] text-white p-8 font-sans">
+    <div className="min-h-screen bg-[#050507] p-8 pb-20">
       <div className="max-w-4xl mx-auto space-y-10">
-        <div className={`p-12 rounded-[3rem] border ${results.computed.classification === 'ROJO' ? 'border-red-500/30 bg-red-500/5' : results.computed.classification === 'AMARILLO' ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-emerald-500/30 bg-emerald-500/5'}`}>
-          <div className="flex justify-between items-start mb-6">
-            <h2 className="text-7xl font-black italic tracking-tighter">{(results.computed.score_global * 100).toFixed(0)}%</h2>
-            <span className={`px-6 py-2 rounded-full text-[10px] font-black uppercase ${results.computed.classification === 'ROJO' ? 'bg-red-500 text-white' : results.computed.classification === 'AMARILLO' ? 'bg-yellow-500 text-black' : 'bg-emerald-500 text-black'}`}>
-              {results.computed.classification}
-            </span>
+        <div className={`p-12 rounded-[4rem] border-2 ${results.computed.classification === 'ROJO' ? 'border-red-500 bg-red-500/5' : results.computed.classification === 'AMARILLO' ? 'border-yellow-500 bg-yellow-500/5' : 'border-emerald-500 bg-emerald-500/5'}`}>
+          <div className="flex justify-between items-end mb-8">
+            <h2 className="text-8xl font-black italic tracking-tighter text-white">{(results.computed.score_global * 100).toFixed(0)}<span className="text-2xl opacity-50">%</span></h2>
+            <div className={`px-8 py-3 rounded-full text-[10px] font-black uppercase tracking-widest ${results.computed.classification === 'ROJO' ? 'bg-red-500' : results.computed.classification === 'AMARILLO' ? 'bg-yellow-500 text-black' : 'bg-emerald-500 text-black'}`}>
+              Estado: {results.computed.classification}
+            </div>
           </div>
-          <p className="text-xl text-slate-300 italic leading-relaxed">"{results.motivational_message}"</p>
+          <p className="text-2xl text-slate-200 font-light italic leading-relaxed">"{results.insight}"</p>
         </div>
 
-        <div className="bg-indigo-600 p-10 rounded-[3rem] shadow-2xl">
-          <h3 className="text-3xl font-black uppercase italic mb-6">{results.tool_psychology.nombre_herramienta}</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-            {results.tool_psychology.pasos.map((p, i) => (
-              <div key={i} className="bg-white/10 p-4 rounded-xl text-sm font-medium">0{i+1}. {p}</div>
-            ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+          <div className="glass p-10 rounded-[3rem]">
+            <h3 className="text-indigo-500 text-[10px] font-black uppercase tracking-widest mb-6 underline underline-offset-8">Herramienta Psicológica</h3>
+            <h4 className="text-white text-2xl font-black uppercase mb-2">{results.tool_psychology.nombre}</h4>
+            <span className="text-slate-500 text-xs font-bold uppercase">{results.tool_psychology.duracion}</span>
+            <div className="mt-6 space-y-3">
+              {results.tool_psychology.instrucciones.map((ins, i) => (
+                <div key={i} className="flex gap-4 items-start">
+                  <span className="text-indigo-500 font-black">0{i+1}</span>
+                  <p className="text-sm text-slate-400">{ins}</p>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="bg-black/20 p-6 rounded-2xl italic border border-white/5">
-            <p className="text-[10px] font-black uppercase tracking-widest mb-2 opacity-50">Guion Mental</p>
-            "{results.tool_psychology.guion}"
+
+          <div className="bg-indigo-600 p-10 rounded-[3rem] text-white flex flex-col justify-center">
+            <span className="text-black/50 text-[10px] font-black uppercase tracking-widest mb-4 text-center">Mantra de Enfoque</span>
+            <p className="text-3xl font-black italic text-center leading-tight">"{results.tool_psychology.mantra}"</p>
           </div>
         </div>
 
-        <footer className="text-center pb-12">
-          <button onClick={() => setView('checkin')} className="px-12 py-4 border border-white/10 rounded-full text-xs font-black uppercase tracking-widest hover:bg-white/5 transition-all">Nuevo Check-in</button>
-        </footer>
+        <div className="flex justify-center">
+          <button onClick={() => setView('checkin')} className="px-12 py-5 border border-white/10 rounded-full text-xs font-black uppercase tracking-widest text-slate-500 hover:text-white hover:bg-white/5 transition-all">Volver al Panel</button>
+        </div>
       </div>
     </div>
   );
@@ -290,8 +254,5 @@ const App: React.FC = () => {
   return null;
 };
 
-const rootElement = document.getElementById('root');
-if (rootElement) {
-  const root = ReactDOM.createRoot(rootElement);
-  root.render(<React.StrictMode><App /></React.StrictMode>);
-}
+const root = ReactDOM.createRoot(document.getElementById('root')!);
+root.render(<App />);
