@@ -54,10 +54,15 @@ Reglas críticas:
 
 // --- 3. SERVICIOS ---
 async function generateProfileAnalysis(data: any): Promise<AthleteProfile> {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey || apiKey === "undefined") {
+    throw new Error("API_KEY_MISSING");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Analiza y estructura este perfil de atleta: ${JSON.stringify(data)}`,
+    contents: [{ parts: [{ text: `Analiza y estructura este perfil de atleta: ${JSON.stringify(data)}` }] }],
     config: {
       systemInstruction: SYSTEM_PROMPT,
       responseMimeType: 'application/json',
@@ -79,15 +84,18 @@ async function generateProfileAnalysis(data: any): Promise<AthleteProfile> {
   return {
     ...data,
     ...aiData,
-    athlete_id: aiData.athlete_id || `ath_${Date.now()}` // Fallback ID
+    athlete_id: aiData.athlete_id || `ath_${Date.now()}`
   };
 }
 
 async function getCoachEngineAnalysis(profile: AthleteProfile, scores: DailyScores): Promise<CoachEngineResponse> {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API_KEY_MISSING");
+
+  const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Estado actual: Perfil ${JSON.stringify(profile)}, Scores ${JSON.stringify(scores)}`,
+    contents: [{ parts: [{ text: `Estado actual: Perfil ${JSON.stringify(profile)}, Scores ${JSON.stringify(scores)}` }] }],
     config: {
       systemInstruction: SYSTEM_PROMPT,
       responseMimeType: 'application/json',
@@ -148,7 +156,6 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    console.log("App iniciada correctamente");
     const saved = localStorage.getItem('athlete_profile');
     if (saved) {
       try {
@@ -171,9 +178,13 @@ const App: React.FC = () => {
       localStorage.setItem('athlete_profile', JSON.stringify(full));
       await supabase.from('perfiles').upsert([full], { onConflict: 'athlete_id' });
       setView('checkin');
-    } catch (err) {
-      console.error(err);
-      alert("Error en el perfil. Revisa tu API Key.");
+    } catch (err: any) {
+      console.error("DEBUG ERROR IA:", err);
+      if (err.message === "API_KEY_MISSING") {
+        alert("Falta la API_KEY en Netlify. Revisa la configuración de variables de entorno.");
+      } else {
+        alert("Error de conexión con la IA. Verifica que tu API Key de Google AI Studio sea válida y tengas saldo/cuota.");
+      }
     } finally { setLoading(false); }
   };
 
@@ -192,24 +203,24 @@ const App: React.FC = () => {
       setView('results');
     } catch (err) {
       console.error(err);
-      alert("Error al analizar el estado.");
+      alert("Error al analizar el estado. Revisa la consola (F12).");
     } finally { setLoading(false); }
   };
 
   if (loading) return (
     <div className="min-h-screen bg-[#050507] flex flex-col items-center justify-center text-indigo-500 font-black">
-      <Spinner /><p className="mt-4 uppercase tracking-widest animate-pulse">Sincronizando con Coach Engine...</p>
+      <Spinner /><p className="mt-4 uppercase tracking-widest animate-pulse">Analizando con Coach Engine...</p>
     </div>
   );
 
   if (view === 'onboarding') return (
-    <div className="min-h-screen bg-[#050507] flex items-center justify-center p-6 text-white">
+    <div className="min-h-screen bg-[#050507] flex items-center justify-center p-6 text-white font-sans">
       <div className="max-w-md w-full bg-[#111115] border border-white/5 p-10 rounded-[2.5rem] shadow-2xl">
         <h1 className="text-3xl font-black italic uppercase tracking-tighter text-indigo-500 mb-8 text-center">Athlete Profile</h1>
         <form onSubmit={handleOnboarding} className="space-y-4">
-          <input name="nombre" placeholder="Nombre" required className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none focus:border-indigo-500 transition-all" />
-          <input name="apellidos" placeholder="Apellidos" required className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none focus:border-indigo-500 transition-all" />
-          <input name="deporte_principal" placeholder="Deporte Principal" required className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none focus:border-indigo-500 transition-all" />
+          <input name="nombre" placeholder="Nombre" required className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none focus:border-indigo-500 transition-all text-white" />
+          <input name="apellidos" placeholder="Apellidos" required className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none focus:border-indigo-500 transition-all text-white" />
+          <input name="deporte_principal" placeholder="Deporte Principal" required className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none focus:border-indigo-500 transition-all text-white" />
           <button className="w-full py-5 bg-white text-black font-black uppercase rounded-2xl hover:bg-indigo-600 hover:text-white transition-all transform active:scale-95">Comenzar</button>
         </form>
       </div>
@@ -217,7 +228,7 @@ const App: React.FC = () => {
   );
 
   if (view === 'checkin') return (
-    <div className="min-h-screen bg-[#050507] text-white p-8">
+    <div className="min-h-screen bg-[#050507] text-white p-8 font-sans">
       <div className="max-w-4xl mx-auto space-y-12">
         <header className="flex justify-between items-end border-b border-white/5 pb-8">
           <div>
@@ -238,13 +249,13 @@ const App: React.FC = () => {
             </div>
           ))}
         </div>
-        <button onClick={handleCheckIn} className="w-full py-6 bg-indigo-600 text-white font-black uppercase tracking-[0.2em] rounded-3xl shadow-2xl hover:bg-indigo-500 transition-all transform active:scale-95">Sincronizar IA</button>
+        <button onClick={handleCheckIn} className="w-full py-6 bg-indigo-600 text-white font-black uppercase tracking-[0.2em] rounded-3xl shadow-2xl hover:bg-indigo-500 transition-all transform active:scale-95">Sincronizar Coach Engine</button>
       </div>
     </div>
   );
 
   if (view === 'results' && results) return (
-    <div className="min-h-screen bg-[#050507] text-white p-8">
+    <div className="min-h-screen bg-[#050507] text-white p-8 font-sans">
       <div className="max-w-4xl mx-auto space-y-10">
         <div className={`p-12 rounded-[3rem] border ${results.computed.classification === 'ROJO' ? 'border-red-500/30 bg-red-500/5' : results.computed.classification === 'AMARILLO' ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-emerald-500/30 bg-emerald-500/5'}`}>
           <div className="flex justify-between items-start mb-6">
@@ -270,7 +281,7 @@ const App: React.FC = () => {
         </div>
 
         <footer className="text-center pb-12">
-          <button onClick={() => setView('checkin')} className="px-12 py-4 border border-white/10 rounded-full text-xs font-black uppercase tracking-widest hover:bg-white/5 transition-all">Volver al Dashboard</button>
+          <button onClick={() => setView('checkin')} className="px-12 py-4 border border-white/10 rounded-full text-xs font-black uppercase tracking-widest hover:bg-white/5 transition-all">Nuevo Check-in</button>
         </footer>
       </div>
     </div>
